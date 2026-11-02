@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reservar Cita - Bella Nails</title>
+  <style>
+    body { font-family: sans-serif; background: #fdf6f9; color: #333; margin: 0; padding: 20px; }
+    .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h1 { color: #d96ba0; text-align: center; }
+    label { display: block; margin-top: 15px; font-weight: bold; }
+    select, input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+    button { width: 100%; padding: 12px; background: #d96ba0; color: white; border: none; border-radius: 8px; font-size: 16px; margin-top: 20px; cursor: pointer; }
+    button:disabled { background: #ccc; }
+    .hidden { display: none; }
+    .msg { padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
+    .ok { background: #e7f8ee; color: #1c7a45; }
+    .err { background: #fdeaea; color: #b32626; }
+    .wa-btn { background: #25D366; display: block; text-align: center; text-decoration: none; color: white; padding: 12px; border-radius: 8px; margin-top: 15px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Reserva tu cita</h1>
+    
+    <div id="form-area">
+      <label>Servicio</label>
+      <select id="servicio"><option value="">Cargando...</option></select>
+
+      <label>Fecha</label>
+      <input type="date" id="fecha">
+
+      <label>Hora</label>
+      <input type="time" id="hora" step="900">
+
+      <label>Tu nombre</label>
+      <input type="text" id="cliente" placeholder="Ej: Laura Pérez">
+
+      <label>Tu teléfono</label>
+      <input type="tel" id="telefono" placeholder="Ej: 55551234">
+
+      <button id="btn-reservar" onclick="reservar()">Confirmar reserva</button>
+    </div>
+
+    <div id="resultado" class="hidden"></div>
+  </div>
+
+  <script>
+    let servicios = [];
+
+    // Cargar servicios al abrir la página
+    fetch('/api/servicios')
+      .then(r => r.json())
+      .then(data => {
+        servicios = data;
+        const select = document.getElementById('servicio');
+        select.innerHTML = '<option value="">Selecciona un servicio</option>';
+        data.forEach(s => {
+          select.innerHTML += `<option value="${s.id}">${s.nombre} (${s.duracion} min) - $${s.precio}</option>`;
+        });
+      });
+
+    // Poner fecha de hoy por defecto
+    const hoy = new Date().toISOString().split('T')[0];
+    document.getElementById('fecha').value = hoy;
+    document.getElementById('fecha').min = hoy;
+
+    async function reservar() {
+      const btn = document.getElementById('btn-reservar');
+      const servicioId = document.getElementById('servicio').value;
+      const fecha = document.getElementById('fecha').value;
+      const hora = document.getElementById('hora').value;
+      const cliente = document.getElementById('cliente').value;
+      const telefono = document.getElementById('telefono').value;
+
+      if (!servicioId || !fecha || !hora || !cliente || !telefono) {
+        alert("Por favor, llena todos los campos.");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "Reservando...";
+
+      try {
+        const res = await fetch('/api/reservar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fecha, hora, servicio_id: servicioId, cliente, telefono })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          document.getElementById('form-area').classList.add('hidden');
+          const div = document.getElementById('resultado');
+          div.classList.remove('hidden');
+          div.innerHTML = `
+            <div class="msg ok">¡Cita reservada con éxito!</div>
+            <p style="text-align:center; margin-top:15px;">Para confirmar tu cita con el negocio, haz clic aquí:</p>
+            <a href="${data.waLink}" class="wa-btn" target="_blank">Enviar WhatsApp de confirmación</a>
+          `;
+        } else {
+          alert(data.error || "Error al reservar");
+          btn.disabled = false;
+          btn.innerText = "Confirmar reserva";
+        }
+      } catch (e) {
+        alert("Error de conexión");
+        btn.disabled = false;
+        btn.innerText = "Confirmar reserva";
+      }
+    }
+  </script>
+</body>
+</html>

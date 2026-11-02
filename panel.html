@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Panel - Bella Nails</title>
+  <style>
+    body { font-family: sans-serif; background: #f4f6f8; margin: 0; padding: 20px; color: #333; }
+    .container { max-width: 800px; margin: auto; }
+    .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    input, button, select { padding: 10px; border-radius: 6px; border: 1px solid #ccc; margin: 5px 0; width: 100%; box-sizing: border-box; }
+    button { background: #d96ba0; color: white; border: none; cursor: pointer; font-weight: bold; }
+    .hidden { display: none; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 14px; }
+    .badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+    .pendiente { background: #fff4e0; color: #b8791a; }
+    .confirmada { background: #e7f8ee; color: #1c7a45; }
+    .cancelada { background: #fdeaea; color: #b32626; }
+    .acciones button { width: auto; padding: 5px 10px; font-size: 12px; margin-right: 5px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card" id="login-box">
+      <h2>Acceso al Panel</h2>
+      <input type="password" id="pass" placeholder="Contraseña">
+      <button onclick="login()">Entrar</button>
+    </div>
+
+    <div id="app" class="hidden">
+      <button onclick="logout()" style="margin-bottom: 15px; background: #666;">Cerrar sesión</button>
+      
+      <div class="card">
+        <h2>Citas</h2>
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+          <input type="date" id="f-desde" onchange="cargarCitas()">
+          <input type="date" id="f-hasta" onchange="cargarCitas()">
+        </div>
+        <div id="lista-citas">Cargando...</div>
+      </div>
+
+      <div class="card">
+        <h2>Servicios</h2>
+        <div id="lista-servicios">Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pass = sessionStorage.getItem('pass');
+    if (pass) login();
+
+    function login() {
+      const p = document.getElementById('pass').value || sessionStorage.getItem('pass');
+      if (!p) return;
+      sessionStorage.setItem('pass', p);
+      document.getElementById('login-box').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      
+      // Poner fechas por defecto (hoy a 7 días después)
+      const hoy = new Date();
+      const mas7 = new Date();
+      mas7.setDate(hoy.getDate() + 7);
+      if (!document.getElementById('f-desde').value) {
+        document.getElementById('f-desde').value = hoy.toISOString().split('T')[0];
+        document.getElementById('f-hasta').value = mas7.toISOString().split('T')[0];
+      }
+      
+      cargarCitas();
+      cargarServicios();
+    }
+
+    function logout() {
+      sessionStorage.removeItem('pass');
+      location.reload();
+    }
+
+    async function cargarCitas() {
+      const desde = document.getElementById('f-desde').value;
+      const hasta = document.getElementById('f-hasta').value;
+      const p = sessionStorage.getItem('pass');
+
+      const res = await fetch(`/api/citas?desde=${desde}&hasta=${hasta}`, {
+        headers: { 'Authorization': `Bearer ${p}` }
+      });
+      if (res.status === 401) { logout(); return; }
+
+      const citas = await res.json();
+      const div = document.getElementById('lista-citas');
+      
+      if (citas.length === 0) {
+        div.innerHTML = '<p>No hay citas en este rango de fechas.</p>';
+        return;
+      }
+
+      let html = `<table><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Acciones</th></tr>`;
+      citas.forEach(c => {
+        html += `
+          <tr>
+            <td>${c.fecha}</td>
+            <td>${c.hora}</td>
+            <td>${c.cliente}<br><small>${c.telefono}</small></td>
+            <td>${c.servicio_nombre}</td>
+            <td><span class="badge ${c.estado}">${c.estado}</span></td>
+            <td class="acciones">
+              <button onclick="cambiarEstado('${c.id}', 'confirmada')">✓</button>
+              <button onclick="cambiarEstado('${c.id}', 'cancelada')" style="background:#b32626;">✕</button>
+            </td>
+          </tr>
+        `;
+      });
+      html += `</table>`;
+      div.innerHTML = html;
+    }
+
+    async function cambiarEstado(id, estado) {
+      const p = sessionStorage.getItem('pass');
+      await fetch('/api/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${p}` },
+        body: JSON.stringify({ id, estado })
+      });
+      cargarCitas();
+    }
+
+    async function cargarServicios() {
+      const res = await fetch('/api/servicios');
+      const servicios = await res.json();
+      const div = document.getElementById('lista-servicios');
+      
+      let html = `<table><tr><th>Nombre</th><th>Duración</th><th>Precio</th></tr>`;
+      servicios.forEach(s => {
+        html += `<tr><td>${s.nombre}</td><td>${s.duracion} min</td><td>$${s.precio}</td></tr>`;
+      });
+      html += `</table>`;
+      
+      // Formulario rápido para agregar (puedes expandirlo luego)
+      html += `
+        <h3 style="margin-top:20px; font-size:16px;">Agregar Servicio</h3>
+        <input type="text" id="new-nombre" placeholder="Nombre">
+        <input type="number" id="new-duracion" placeholder="Duración (min)">
+        <input type="number" id="new-precio" placeholder="Precio ($)">
+        <button onclick="agregarServicio()">Guardar Servicio</button>
+      `;
+      div.innerHTML = html;
+    }
+
+    async function agregarServicio() {
+      const p = sessionStorage.getItem('pass');
+      const nombre = document.getElementById('new-nombre').value;
+      const duracion = document.getElementById('new-duracion').value;
+      const precio = document.getElementById('new-precio').value;
+
+      await fetch('/api/servicios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${p}` },
+        body: JSON.stringify({ nombre, duracion, precio, activo: true })
+      });
+      cargarServicios();
+    }
+  </script>
+</body>
+</html>
