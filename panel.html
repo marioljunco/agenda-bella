@@ -3,162 +3,218 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Panel - Bella Nails</title>
-  <style>
-    body { font-family: sans-serif; background: #f4f6f8; margin: 0; padding: 20px; color: #333; }
-    .container { max-width: 800px; margin: auto; }
-    .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-    input, button, select { padding: 10px; border-radius: 6px; border: 1px solid #ccc; margin: 5px 0; width: 100%; box-sizing: border-box; }
-    button { background: #d96ba0; color: white; border: none; cursor: pointer; font-weight: bold; }
-    .hidden { display: none; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 14px; }
-    .badge { padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-    .pendiente { background: #fff4e0; color: #b8791a; }
-    .confirmada { background: #e7f8ee; color: #1c7a45; }
-    .cancelada { background: #fdeaea; color: #b32626; }
-    .acciones button { width: auto; padding: 5px 10px; font-size: 12px; margin-right: 5px; }
-  </style>
+  <title>Panel de Dueño - TurnosCuba</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style> body { font-family: 'Inter', sans-serif; } </style>
 </head>
-<body>
-  <div class="container">
-    <div class="card" id="login-box">
-      <h2>Acceso al Panel</h2>
-      <input type="password" id="pass" placeholder="Contraseña">
-      <button onclick="login()">Entrar</button>
-    </div>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div id="root"></div>
 
-    <div id="app" class="hidden">
-      <button onclick="logout()" style="margin-bottom: 15px; background: #666;">Cerrar sesión</button>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [isLoggedIn, setIsLoggedIn] = useState(false);
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
       
-      <div class="card">
-        <h2>Citas</h2>
-        <div style="display:flex; gap:10px; margin-bottom:10px;">
-          <input type="date" id="f-desde" onchange="cargarCitas()">
-          <input type="date" id="f-hasta" onchange="cargarCitas()">
+      const [appointments, setAppointments] = useState([]);
+      const [services, setServices] = useState([]);
+      const [activeTab, setActiveTab] = useState('appointments');
+      
+      // Formulario nuevo servicio
+      const [newSName, setNewSName] = useState('');
+      const [newSPrice, setNewSPrice] = useState('');
+      const [newSDuration, setNewSDuration] = useState('30');
+
+      const fetchData = async () => {
+        const p = sessionStorage.getItem('panel_pass');
+        if (!p) return;
+
+        // Cargar citas
+        const resCitas = await fetch('/api/citas', { headers: { 'Authorization': `Bearer ${p}` } });
+        if (resCitas.ok) setAppointments(await resCitas.json());
+        
+        // Cargar servicios
+        const resServ = await fetch('/api/servicios');
+        if (resServ.ok) setServices(await resServ.json());
+      };
+
+      useEffect(() => {
+        const savedPass = sessionStorage.getItem('panel_pass');
+        if (savedPass) {
+          setPassword(savedPass);
+          setIsLoggedIn(true);
+          fetchData();
+        }
+      }, []);
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        setError('');
+        const res = await fetch('/api/citas', { headers: { 'Authorization': `Bearer ${password}` } });
+        if (res.ok) {
+          sessionStorage.setItem('panel_pass', password);
+          setIsLoggedIn(true);
+          fetchData();
+        } else {
+          setError('Contraseña incorrecta');
+        }
+      };
+
+      const handleLogout = () => {
+        sessionStorage.removeItem('panel_pass');
+        setIsLoggedIn(false);
+        setPassword('');
+      };
+
+      const handleAddService = async (e) => {
+        e.preventDefault();
+        const p = sessionStorage.getItem('panel_pass');
+        await fetch('/api/servicios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${p}` },
+          body: JSON.stringify({ nombre: newSName, precio: Number(newSPrice), duracion: Number(newSDuration), activo: true })
+        });
+        setNewSName(''); setNewSPrice('');
+        fetchData(); // Recargar lista
+      };
+
+      if (!isLoggedIn) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-100">
+            <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border">
+              <div className="text-center mb-6">
+                <div className="bg-emerald-500 w-12 h-12 rounded-xl text-white flex items-center justify-center text-2xl mx-auto mb-3">🏪</div>
+                <h1 className="text-xl font-bold text-slate-800">Panel de Dueño</h1>
+                <p className="text-sm text-slate-500">Ingresa tu contraseña</p>
+              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  placeholder="••••••••"
+                />
+                {error && <p className="text-red-500 text-xs text-center">{error}</p>}
+                <button type="submit" className="w-full bg-emerald-600 text-white py-3 rounded-xl font-medium hover:bg-emerald-700 transition">Entrar</button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+          <header className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="bg-emerald-500 p-2 rounded-xl text-slate-900 font-bold">🏪</div>
+                <h1 className="text-xl font-black tracking-tight">Turnos<span className="text-emerald-400">Cuba</span> <span className="text-xs font-normal text-slate-400 ml-2">Admin</span></h1>
+              </div>
+              <button onClick={handleLogout} className="text-sm bg-slate-800 px-4 py-2 rounded-lg hover:bg-slate-700 transition">Cerrar Sesión</button>
+            </div>
+          </header>
+
+          <main className="max-w-7xl mx-auto px-4 py-8 flex-1 w-full">
+            <div className="flex border-b mb-8 gap-6 text-sm font-semibold">
+              <button onClick={() => setActiveTab('appointments')} className={`pb-3 border-b-2 ${activeTab === 'appointments' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500'}`}>
+                📅 Citas ({appointments.length})
+              </button>
+              <button onClick={() => setActiveTab('services')} className={`pb-3 border-b-2 ${activeTab === 'services' ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-slate-500'}`}>
+                ✂️ Servicios ({services.length})
+              </button>
+            </div>
+
+            {activeTab === 'appointments' && (
+              <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                <div className="p-6 border-b"><h3 className="font-bold text-slate-800">Citas Recibidas (Base de Datos Real)</h3></div>
+                {appointments.length === 0 ? (
+                  <div className="p-12 text-center text-slate-400 text-sm">No hay citas agendadas todavía.</div>
+                ) : (
+                  <div className="divide-y">
+                    {appointments.map(app => (
+                      <div key={app.id} className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900">{app.servicio_nombre}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${app.estado === 'pendiente' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{app.estado}</span>
+                          </div>
+                          <p className="text-xs text-slate-600 mt-1">👤 {app.cliente} | 📞 {app.telefono}</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="font-bold text-slate-800 text-sm">{app.fecha}</div>
+                            <div className="text-xs text-emerald-600 font-semibold">{app.hora}</div>
+                          </div>
+                          <a
+                            href={`https://wa.me/${app.telefono.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hola ${app.cliente}, confirmamos tu cita en nuestro local para el ${app.fecha} a las ${app.hora}.`)}`}
+                            target="_blank"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-xl text-xs font-medium flex items-center gap-1"
+                          >
+                            💬 WhatsApp
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'services' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {services.map(service => (
+                    <div key={service.id} className="bg-white p-5 rounded-2xl border shadow-sm flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-bold text-slate-900 mb-2">{service.nombre}</h4>
+                      </div>
+                      <div className="flex justify-between items-center pt-3 border-t text-sm">
+                        <span className="font-bold text-emerald-600">{service.precio} CUP</span>
+                        <span className="text-xs text-slate-500">⏱️ {service.duracion} min</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border shadow-sm h-fit">
+                  <h3 className="font-bold text-slate-800 mb-4">Añadir Servicio (Real)</h3>
+                  <form onSubmit={handleAddService} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Nombre</label>
+                      <input type="text" value={newSName} onChange={(e) => setNewSName(e.target.value)} className="w-full px-3 py-2 rounded-xl border text-sm" required />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Precio (CUP)</label>
+                      <input type="number" value={newSPrice} onChange={(e) => setNewSPrice(e.target.value)} className="w-full px-3 py-2 rounded-xl border text-sm" required />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Duración (min)</label>
+                      <select value={newSDuration} onChange={(e) => setNewSDuration(e.target.value)} className="w-full px-3 py-2 rounded-xl border text-sm bg-white">
+                        <option value="15">15 min</option>
+                        <option value="30">30 min</option>
+                        <option value="45">45 min</option>
+                        <option value="60">60 min</option>
+                        <option value="90">90 min</option>
+                      </select>
+                    </div>
+                    <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2.5 rounded-xl text-sm">Guardar en Base de Datos</button>
+                  </form>
+                </div>
+              </div>
+            )}
+          </main>
         </div>
-        <div id="lista-citas">Cargando...</div>
-      </div>
-
-      <div class="card">
-        <h2>Servicios</h2>
-        <div id="lista-servicios">Cargando...</div>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    const pass = sessionStorage.getItem('pass');
-    if (pass) login();
-
-    function login() {
-      const p = document.getElementById('pass').value || sessionStorage.getItem('pass');
-      if (!p) return;
-      sessionStorage.setItem('pass', p);
-      document.getElementById('login-box').classList.add('hidden');
-      document.getElementById('app').classList.remove('hidden');
-      
-      // Poner fechas por defecto (hoy a 7 días después)
-      const hoy = new Date();
-      const mas7 = new Date();
-      mas7.setDate(hoy.getDate() + 7);
-      if (!document.getElementById('f-desde').value) {
-        document.getElementById('f-desde').value = hoy.toISOString().split('T')[0];
-        document.getElementById('f-hasta').value = mas7.toISOString().split('T')[0];
-      }
-      
-      cargarCitas();
-      cargarServicios();
+      );
     }
 
-    function logout() {
-      sessionStorage.removeItem('pass');
-      location.reload();
-    }
-
-    async function cargarCitas() {
-      const desde = document.getElementById('f-desde').value;
-      const hasta = document.getElementById('f-hasta').value;
-      const p = sessionStorage.getItem('pass');
-
-      const res = await fetch(`/api/citas?desde=${desde}&hasta=${hasta}`, {
-        headers: { 'Authorization': `Bearer ${p}` }
-      });
-      if (res.status === 401) { logout(); return; }
-
-      const citas = await res.json();
-      const div = document.getElementById('lista-citas');
-      
-      if (citas.length === 0) {
-        div.innerHTML = '<p>No hay citas en este rango de fechas.</p>';
-        return;
-      }
-
-      let html = `<table><tr><th>Fecha</th><th>Hora</th><th>Cliente</th><th>Servicio</th><th>Estado</th><th>Acciones</th></tr>`;
-      citas.forEach(c => {
-        html += `
-          <tr>
-            <td>${c.fecha}</td>
-            <td>${c.hora}</td>
-            <td>${c.cliente}<br><small>${c.telefono}</small></td>
-            <td>${c.servicio_nombre}</td>
-            <td><span class="badge ${c.estado}">${c.estado}</span></td>
-            <td class="acciones">
-              <button onclick="cambiarEstado('${c.id}', 'confirmada')">✓</button>
-              <button onclick="cambiarEstado('${c.id}', 'cancelada')" style="background:#b32626;">✕</button>
-            </td>
-          </tr>
-        `;
-      });
-      html += `</table>`;
-      div.innerHTML = html;
-    }
-
-    async function cambiarEstado(id, estado) {
-      const p = sessionStorage.getItem('pass');
-      await fetch('/api/estado', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${p}` },
-        body: JSON.stringify({ id, estado })
-      });
-      cargarCitas();
-    }
-
-    async function cargarServicios() {
-      const res = await fetch('/api/servicios');
-      const servicios = await res.json();
-      const div = document.getElementById('lista-servicios');
-      
-      let html = `<table><tr><th>Nombre</th><th>Duración</th><th>Precio</th></tr>`;
-      servicios.forEach(s => {
-        html += `<tr><td>${s.nombre}</td><td>${s.duracion} min</td><td>$${s.precio}</td></tr>`;
-      });
-      html += `</table>`;
-      
-      // Formulario rápido para agregar (puedes expandirlo luego)
-      html += `
-        <h3 style="margin-top:20px; font-size:16px;">Agregar Servicio</h3>
-        <input type="text" id="new-nombre" placeholder="Nombre">
-        <input type="number" id="new-duracion" placeholder="Duración (min)">
-        <input type="number" id="new-precio" placeholder="Precio ($)">
-        <button onclick="agregarServicio()">Guardar Servicio</button>
-      `;
-      div.innerHTML = html;
-    }
-
-    async function agregarServicio() {
-      const p = sessionStorage.getItem('pass');
-      const nombre = document.getElementById('new-nombre').value;
-      const duracion = document.getElementById('new-duracion').value;
-      const precio = document.getElementById('new-precio').value;
-
-      await fetch('/api/servicios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${p}` },
-        body: JSON.stringify({ nombre, duracion, precio, activo: true })
-      });
-      cargarServicios();
-    }
+    ReactDOM.render(<App />, document.getElementById('root'));
   </script>
 </body>
 </html>
