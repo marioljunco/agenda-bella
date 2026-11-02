@@ -19,7 +19,7 @@
 
     function App() {
       const [negocios, setNegocios] = useState([]);
-      const [currentView, setCurrentView] = useState('directory'); // 'directory' | 'booking'
+      const [currentView, setCurrentView] = useState('directory');
       const [selectedBusiness, setSelectedBusiness] = useState(null);
       const [loading, setLoading] = useState(true);
 
@@ -69,7 +69,6 @@
       );
     }
 
-    // --- VISTA 1: DIRECTORIO DE NEGOCIOS ---
     function BusinessDirectory({ negocios, onSelect }) {
       return (
         <div className="max-w-7xl mx-auto px-4 py-10">
@@ -100,13 +99,14 @@
       );
     }
 
-    // --- VISTA 2: FLUJO DE RESERVA POR PASOS ---
     function BookingFlow({ business, onBackToDirectory }) {
-      const [step, setStep] = useState(1); // 1: Servicios, 2: Fecha y Hora
+      const [step, setStep] = useState(1);
       
       const [services, setServices] = useState([]);
       const [selectedServices, setSelectedServices] = useState([]);
-      const [occupiedTimes, setOccupiedTimes] = useState([]);
+      
+      // Aquí guardaremos los objetos de citas ocupadas, no solo las horas
+      const [occupiedAppointments, setOccupiedAppointments] = useState([]);
       
       const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
       const [selectedTime, setSelectedTime] = useState('');
@@ -117,21 +117,20 @@
       const [showModal, setShowModal] = useState(false);
       const [modalMsg, setModalMsg] = useState('');
 
-      // 1. Cargar servicios del negocio
       useEffect(() => {
         fetch('/api/servicios')
           .then(res => res.json())
           .then(data => setServices(data));
       }, []);
 
-      // 2. Cargar horas ocupadas cuando cambia la fecha
+      // Cargar citas ocupadas de la fecha seleccionada
       useEffect(() => {
         if (selectedDate) {
           fetch(`/api/citas?desde=${selectedDate}&hasta=${selectedDate}`)
             .then(res => res.json())
             .then(data => {
-              // Guardamos las horas ocupadas (puedes filtrar canceladas si quieres)
-              setOccupiedTimes(data.filter(c => c.estado !== 'cancelada').map(c => c.hora));
+              // Guardamos las citas enteras (hora y duración) que no estén canceladas
+              setOccupiedAppointments(data.filter(c => c.estado !== 'cancelada'));
             });
         }
       }, [selectedDate]);
@@ -147,11 +146,18 @@
       const totalDuration = selectedServices.reduce((acc, s) => acc + s.duracion, 0);
       const totalPrice = selectedServices.reduce((acc, s) => acc + s.precio, 0);
 
+      // Función para convertir "HH:MM" a minutos totales
+      const timeToMins = (timeStr) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        return h * 60 + m;
+      };
+
       const generateTimeSlots = () => {
         if (selectedServices.length === 0) return [];
         let slots = [];
         let [openH, openM] = business.horario_apertura.split(':').map(Number);
         let [closeH, closeM] = business.horario_cierre.split(':').map(Number);
+        
         let currentMins = openH * 60 + openM;
         let closeMins = closeH * 60 + closeM;
 
@@ -160,17 +166,19 @@
           let m = currentMins % 60;
           let timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
           
-          // Comprobar si se cruza con alguna hora ocupada
           let endMins = currentMins + totalDuration;
-          let endTimeStr = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
           
           let isOccupied = false;
-          for (let occ of occupiedTimes) {
-             let [oh, om] = occ.split(':').map(Number);
-             let occMins = oh * 60 + om;
-             // Si nuestra cita empieza antes de que termine una ocupada, y termina después de que empiece
-             if (currentMins < occMins + 30 && endMins > occMins) { // Asumimos 30 min de bloqueo
+          
+          // Comprobamos si el nuevo turno choca con alguna cita existente
+          for (let app of occupiedAppointments) {
+             let appStart = timeToMins(app.hora);
+             let appEnd = appStart + app.duracion; // Usamos la duración real de la cita!
+             
+             // Si el inicio es antes de que termine la cita, y el fin es después de que inicie...
+             if (currentMins < appEnd && endMins > appStart) {
                isOccupied = true;
+               break;
              }
           }
 
@@ -247,7 +255,6 @@
             <span className="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full uppercase">{business.nombre}</span>
           </div>
 
-          {/* MODAL DE ERROR */}
           {showModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
@@ -259,7 +266,6 @@
             </div>
           )}
 
-          {/* STEP 1: SERVICIOS */}
           {step === 1 && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border mb-8">
               <h2 className="text-lg font-bold text-slate-800 mb-4">1. Selecciona los Servicios</h2>
@@ -297,7 +303,6 @@
             </div>
           )}
 
-          {/* STEP 2: FECHA Y HORA */}
           {step === 2 && (
             <form onSubmit={handleBook} className="bg-white rounded-2xl p-6 shadow-sm border space-y-6">
               <div className="flex justify-between items-center border-b pb-4">
@@ -326,9 +331,11 @@
                       disabled={slot.occupied}
                       onClick={() => setSelectedTime(slot.time)}
                       className={`py-2 px-3 rounded-xl text-sm font-medium transition-all ${
-                        slot.occupied ? 'bg-slate-100 text-slate-400 cursor-not-allowed line-through' :
-                        selectedTime === slot.time ? 'bg-emerald-600 text-white shadow-md' :
-                        'bg-slate-50 text-slate-700 border hover:border-emerald-600'
+                        slot.occupied 
+                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed line-through opacity-50' // Estilo tachado y opaco
+                          : selectedTime === slot.time 
+                            ? 'bg-emerald-600 text-white shadow-md' 
+                            : 'bg-slate-50 text-slate-700 border hover:border-emerald-600'
                       }`}
                     >
                       {slot.time}
