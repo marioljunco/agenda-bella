@@ -4,18 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TurnosCuba - Reserva tu Cita</title>
-  <!-- Tailwind CSS -->
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-  <!-- React & ReactDOM UMD -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <!-- Babel Standalone for JSX in browser -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    body { font-family: 'Inter', sans-serif; }
-  </style>
+  <style> body { font-family: 'Inter', sans-serif; } </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
   <div id="root"></div>
@@ -24,121 +18,218 @@
     const { useState, useEffect } = React;
 
     function App() {
-      const [services, setServices] = useState([]);
+      const [negocios, setNegocios] = useState([]);
+      const [currentView, setCurrentView] = useState('directory'); // 'directory' | 'booking'
+      const [selectedBusiness, setSelectedBusiness] = useState(null);
       const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        fetch('/api/negocios')
+          .then(res => res.json())
+          .then(data => {
+            setNegocios(data);
+            setLoading(false);
+          })
+          .catch(err => { console.error(err); setLoading(false); });
+      }, []);
+
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+          <header className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+              <div 
+                className="flex items-center gap-2 cursor-pointer"
+                onClick={() => { setCurrentView('directory'); setSelectedBusiness(null); }}
+              >
+                <div className="bg-emerald-500 p-2 rounded-xl text-slate-900 font-bold">💅</div>
+                <div>
+                  <h1 className="text-xl font-black tracking-tight text-white">TurnosCuba</h1>
+                  <p className="text-xs text-slate-400">Reserva tu cita online</p>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 w-full">
+            {loading ? (
+              <div className="text-center mt-20 text-slate-500">Cargando directorio...</div>
+            ) : currentView === 'directory' ? (
+              <BusinessDirectory 
+                negocios={negocios} 
+                onSelect={(biz) => { setSelectedBusiness(biz); setCurrentView('booking'); }} 
+              />
+            ) : (
+              <BookingFlow 
+                business={selectedBusiness} 
+                onBackToDirectory={() => { setCurrentView('directory'); setSelectedBusiness(null); }} 
+              />
+            )}
+          </main>
+        </div>
+      );
+    }
+
+    // --- VISTA 1: DIRECTORIO DE NEGOCIOS ---
+    function BusinessDirectory({ negocios, onSelect }) {
+      return (
+        <div className="max-w-7xl mx-auto px-4 py-10">
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Directorio de Negocios</h1>
+            <p className="text-slate-600 mt-3 text-base">Selecciona un local para ver sus servicios y reservar.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {negocios.map(biz => (
+              <div
+                key={biz.id}
+                onClick={() => onSelect(biz)}
+                className="bg-white rounded-2xl p-6 shadow-sm border hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 mb-2">{biz.nombre}</h3>
+                  <p className="text-xs text-slate-500 mb-1">📍 {biz.direccion}</p>
+                  <p className="text-xs text-slate-500">📞 {biz.telefono}</p>
+                </div>
+                <div className="mt-6 pt-4 border-t flex items-center justify-between text-sm">
+                  <span className="text-emerald-600 font-semibold">Ver servicios y reservar &rarr;</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // --- VISTA 2: FLUJO DE RESERVA POR PASOS ---
+    function BookingFlow({ business, onBackToDirectory }) {
+      const [step, setStep] = useState(1); // 1: Servicios, 2: Fecha y Hora
       
-      const [selectedService, setSelectedService] = useState(null);
+      const [services, setServices] = useState([]);
+      const [selectedServices, setSelectedServices] = useState([]);
+      const [occupiedTimes, setOccupiedTimes] = useState([]);
+      
       const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
       const [selectedTime, setSelectedTime] = useState('');
       const [clientName, setClientName] = useState('');
       const [clientPhone, setClientPhone] = useState('+53 5');
       
       const [bookingSuccess, setBookingSuccess] = useState(null);
-      const [errorMsg, setErrorMsg] = useState('');
+      const [showModal, setShowModal] = useState(false);
+      const [modalMsg, setModalMsg] = useState('');
 
-      // Configuración del negocio (puedes cambiarlo luego para que venga de la BD)
-      const businessName = "Bella Nails";
-      const openTime = "09:00";
-      const closeTime = "19:00";
-
+      // 1. Cargar servicios del negocio
       useEffect(() => {
-        // Cargar servicios reales de la base de datos
         fetch('/api/servicios')
           .then(res => res.json())
-          .then(data => {
-            setServices(data);
-            setLoading(false);
-          })
-          .catch(err => {
-            console.error(err);
-            setLoading(false);
-          });
+          .then(data => setServices(data));
       }, []);
 
-      // Generar horarios (cada 30 min para que sea fácil elegir)
-      const generateTimeSlots = () => {
-        if (!selectedService) return [];
-        
-        let slots = [];
-        let [openH, openM] = openTime.split(':').map(Number);
-        let [closeH, closeM] = closeTime.split(':').map(Number);
+      // 2. Cargar horas ocupadas cuando cambia la fecha
+      useEffect(() => {
+        if (selectedDate) {
+          fetch(`/api/citas?desde=${selectedDate}&hasta=${selectedDate}`)
+            .then(res => res.json())
+            .then(data => {
+              // Guardamos las horas ocupadas (puedes filtrar canceladas si quieres)
+              setOccupiedTimes(data.filter(c => c.estado !== 'cancelada').map(c => c.hora));
+            });
+        }
+      }, [selectedDate]);
 
+      const toggleService = (svc) => {
+        if (selectedServices.find(s => s.id === svc.id)) {
+          setSelectedServices(selectedServices.filter(s => s.id !== svc.id));
+        } else {
+          setSelectedServices([...selectedServices, svc]);
+        }
+      };
+
+      const totalDuration = selectedServices.reduce((acc, s) => acc + s.duracion, 0);
+      const totalPrice = selectedServices.reduce((acc, s) => acc + s.precio, 0);
+
+      const generateTimeSlots = () => {
+        if (selectedServices.length === 0) return [];
+        let slots = [];
+        let [openH, openM] = business.horario_apertura.split(':').map(Number);
+        let [closeH, closeM] = business.horario_cierre.split(':').map(Number);
         let currentMins = openH * 60 + openM;
         let closeMins = closeH * 60 + closeM;
 
-        while (currentMins + selectedService.duracion <= closeMins) {
+        while (currentMins + totalDuration <= closeMins) {
           let h = Math.floor(currentMins / 60);
           let m = currentMins % 60;
           let timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-          slots.push(timeStr);
-          currentMins += 30; // Bloques de 30 min
+          
+          // Comprobar si se cruza con alguna hora ocupada
+          let endMins = currentMins + totalDuration;
+          let endTimeStr = `${String(Math.floor(endMins / 60)).padStart(2, '0')}:${String(endMins % 60).padStart(2, '0')}`;
+          
+          let isOccupied = false;
+          for (let occ of occupiedTimes) {
+             let [oh, om] = occ.split(':').map(Number);
+             let occMins = oh * 60 + om;
+             // Si nuestra cita empieza antes de que termine una ocupada, y termina después de que empiece
+             if (currentMins < occMins + 30 && endMins > occMins) { // Asumimos 30 min de bloqueo
+               isOccupied = true;
+             }
+          }
+
+          slots.push({ time: timeStr, occupied: isOccupied });
+          currentMins += 30;
         }
         return slots;
       };
 
       const handleBook = async (e) => {
         e.preventDefault();
-        setErrorMsg('');
-        if (!clientName || !clientPhone || !selectedTime || !selectedService) return;
+        if (!clientName || !clientPhone || !selectedTime) return;
 
         try {
           const res = await fetch('/api/reservar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              negocio_id: business.id,
               fecha: selectedDate,
               hora: selectedTime,
-              servicio_id: selectedService.id,
+              servicios: selectedServices,
               cliente: clientName,
               telefono: clientPhone
             })
           });
 
           const data = await res.json();
-
           if (res.ok) {
-            setBookingSuccess({ ...data, time: selectedTime, date: selectedDate, service: selectedService });
+            setBookingSuccess({ ...data, time: selectedTime, date: selectedDate });
           } else {
-            setErrorMsg(data.error || 'Error al reservar la cita.');
+            setModalMsg(data.error || 'Error al reservar.');
+            setShowModal(true);
           }
         } catch (err) {
-          setErrorMsg('Error de conexión con el servidor.');
+          setModalMsg('Error de conexión.');
+          setShowModal(true);
         }
       };
-
-      if (loading) {
-        return <div className="min-h-screen flex items-center justify-center text-slate-500">Cargando servicios...</div>;
-      }
 
       if (bookingSuccess) {
         return (
           <div className="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-xl border text-center">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">✓</div>
             <h2 className="text-2xl font-bold text-slate-800">¡Cita Agendada!</h2>
-            <p className="text-slate-600 mt-2 text-sm">Tu turno ha sido registrado correctamente en <span className="font-semibold">{businessName}</span>.</p>
+            <p className="text-slate-600 mt-2 text-sm">Tu turno en <span className="font-semibold">{business.nombre}</span> está registrado.</p>
             
             <div className="bg-slate-50 p-4 rounded-xl my-6 text-left space-y-2 text-sm border">
-              <p><strong>Servicio:</strong> {bookingSuccess.service.nombre}</p>
+              <p><strong>Servicios:</strong> {selectedServices.map(s => s.nombre).join(', ')}</p>
               <p><strong>Fecha y Hora:</strong> {bookingSuccess.date} a las {bookingSuccess.time}</p>
-              <p><strong>Local:</strong> {businessName}</p>
+              <p><strong>Total estimado:</strong> {totalPrice} CUP</p>
             </div>
 
             <div className="space-y-3">
-              <a
-                href={bookingSuccess.waLink}
-                target="_blank"
-                rel="noreferrer"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
-              >
-                💬 Enviar Confirmación por WhatsApp
+              <a href={bookingSuccess.waLink} target="_blank" rel="noreferrer" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg">
+                💬 Enviar Confirmación
               </a>
-              <button
-                onClick={() => { 
-                  setBookingSuccess(null); setSelectedService(null); setSelectedTime(''); setClientName(''); 
-                }}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-xl"
-              >
-                Hacer otra reserva
+              <button onClick={onBackToDirectory} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-xl">
+                Ver todos los negocios
               </button>
             </div>
           </div>
@@ -148,119 +239,124 @@
       const timeSlots = generateTimeSlots();
 
       return (
-        <div className="min-h-screen bg-slate-50 flex flex-col">
-          <header className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
-            <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="bg-emerald-500 p-2 rounded-xl text-slate-900 font-bold">💅</div>
-                <div>
-                  <h1 className="text-xl font-black tracking-tight text-white">{businessName}</h1>
-                  <p className="text-xs text-slate-400">Reserva tu cita online</p>
-                </div>
+        <div className="max-w-4xl mx-auto px-4 py-8">
+          <div className="flex justify-between items-center mb-6">
+            <button onClick={onBackToDirectory} className="text-sm text-emerald-600 font-medium flex items-center gap-1 hover:underline">
+              ← Ver todos los negocios
+            </button>
+            <span className="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full uppercase">{business.nombre}</span>
+          </div>
+
+          {/* MODAL DE ERROR */}
+          {showModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+                <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 text-xl">!</div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">Horario no disponible</h3>
+                <p className="text-sm text-slate-600 mb-6">{modalMsg}</p>
+                <button onClick={() => setShowModal(false)} className="w-full bg-slate-900 text-white py-2.5 rounded-xl font-medium">Entendido</button>
               </div>
             </div>
-          </header>
+          )}
 
-          <main className="max-w-4xl mx-auto px-4 py-8 flex-1 w-full">
-            {errorMsg && (
-              <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 border border-red-200 text-sm text-center font-medium">
-                {errorMsg}
-              </div>
-            )}
-
-            {/* Step 1 */}
+          {/* STEP 1: SERVICIOS */}
+          {step === 1 && (
             <div className="bg-white rounded-2xl p-6 shadow-sm border mb-8">
-              <h2 className="text-lg font-bold text-slate-800 mb-4">1. Selecciona un Servicio</h2>
-              {services.length === 0 ? (
-                <p className="text-slate-500 text-sm">No hay servicios disponibles por ahora.</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {services.map(service => (
+              <h2 className="text-lg font-bold text-slate-800 mb-4">1. Selecciona los Servicios</h2>
+              <p className="text-xs text-slate-500 mb-4">Puedes elegir más de uno. Se calculará el tiempo total.</p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                {services.map(service => {
+                  const isSelected = selectedServices.find(s => s.id === service.id);
+                  return (
                     <div
                       key={service.id}
-                      onClick={() => { setSelectedService(service); setSelectedTime(''); }}
-                      className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedService?.id === service.id ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:border-slate-300'}`}
+                      onClick={() => toggleService(service)}
+                      className={`p-4 rounded-xl border cursor-pointer transition-all ${isSelected ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:border-slate-300'}`}
                     >
                       <div className="flex justify-between items-start mb-2">
                         <h3 className="font-semibold text-slate-800">{service.nombre}</h3>
                         <span className="bg-emerald-100 text-emerald-800 font-bold text-sm px-2 py-0.5 rounded-lg">{service.precio} CUP</span>
                       </div>
-                      <p className="text-xs text-slate-500 font-medium mt-3">⏱️ Duración: {service.duracion} min</p>
+                      <p className="text-xs text-slate-500 font-medium mt-3">⏱️ {service.duracion} min</p>
                     </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl flex justify-between items-center border">
+                <span className="text-sm font-semibold text-slate-700">Total: {totalDuration} min</span>
+                <button
+                  onClick={() => setStep(2)}
+                  disabled={selectedServices.length === 0}
+                  className={`px-6 py-2 rounded-xl text-sm font-medium text-white transition-all ${selectedServices.length > 0 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-300 cursor-not-allowed'}`}
+                >
+                  Siguiente Paso →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: FECHA Y HORA */}
+          {step === 2 && (
+            <form onSubmit={handleBook} className="bg-white rounded-2xl p-6 shadow-sm border space-y-6">
+              <div className="flex justify-between items-center border-b pb-4">
+                <h2 className="text-lg font-bold text-slate-800">2. Elige Fecha y Hora</h2>
+                <button type="button" onClick={() => setStep(1)} className="text-xs text-emerald-600 font-medium hover:underline">← Cambiar servicios</button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Fecha</label>
+                <input
+                  type="date"
+                  min={new Date().toISOString().split('T')[0]}
+                  value={selectedDate}
+                  onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(''); }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Horarios Disponibles (Duración: {totalDuration} min):</label>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                  {timeSlots.map((slot, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={slot.occupied}
+                      onClick={() => setSelectedTime(slot.time)}
+                      className={`py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+                        slot.occupied ? 'bg-slate-100 text-slate-400 cursor-not-allowed line-through' :
+                        selectedTime === slot.time ? 'bg-emerald-600 text-white shadow-md' :
+                        'bg-slate-50 text-slate-700 border hover:border-emerald-600'
+                      }`}
+                    >
+                      {slot.time}
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
 
-            {/* Step 2 */}
-            {selectedService && (
-              <form onSubmit={handleBook} className="bg-white rounded-2xl p-6 shadow-sm border space-y-6">
-                <h2 className="text-lg font-bold text-slate-800">2. Elige Fecha, Hora y tus Datos</h2>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Fecha</label>
-                  <input
-                    type="date"
-                    min={new Date().toISOString().split('T')[0]}
-                    value={selectedDate}
-                    onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(''); }}
-                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border text-sm"
-                  />
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Tu Nombre</label>
+                  <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">Horarios Disponibles:</label>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
-                    {timeSlots.map((time, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setSelectedTime(time)}
-                        className={`py-2 px-3 rounded-xl text-sm font-medium transition-all ${
-                          selectedTime === time ? 'bg-emerald-600 text-white shadow-md' :
-                          'bg-slate-50 text-slate-700 border hover:border-emerald-600'
-                        }`}
-                      >
-                        {time}
-                      </button>
-                    ))}
-                  </div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Tu Teléfono</label>
+                  <input type="text" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm" required />
                 </div>
+              </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Tu Nombre</label>
-                    <input
-                      type="text"
-                      placeholder="Ej. María Rodríguez"
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border text-sm"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Tu Teléfono</label>
-                    <input
-                      type="text"
-                      value={clientPhone}
-                      onChange={(e) => setClientPhone(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border text-sm"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={!selectedTime}
-                  className={`w-full py-3.5 rounded-xl font-medium text-white transition-all ${selectedTime ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg' : 'bg-slate-300 cursor-not-allowed'}`}
-                >
-                  Confirmar Cita
-                </button>
-              </form>
-            )}
-          </main>
+              <button
+                type="submit"
+                disabled={!selectedTime}
+                className={`w-full py-3.5 rounded-xl font-medium text-white transition-all ${selectedTime ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg' : 'bg-slate-300 cursor-not-allowed'}`}
+              >
+                Confirmar Cita ({totalPrice} CUP)
+              </button>
+            </form>
+          )}
         </div>
       );
     }
