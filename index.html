@@ -3,112 +3,269 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reservar Cita - Bella Nails</title>
+  <title>TurnosCuba - Reserva tu Cita</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <!-- React & ReactDOM UMD -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel Standalone for JSX in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: sans-serif; background: #fdf6f9; color: #333; margin: 0; padding: 20px; }
-    .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    h1 { color: #d96ba0; text-align: center; }
-    label { display: block; margin-top: 15px; font-weight: bold; }
-    select, input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background: #d96ba0; color: white; border: none; border-radius: 8px; font-size: 16px; margin-top: 20px; cursor: pointer; }
-    button:disabled { background: #ccc; }
-    .hidden { display: none; }
-    .msg { padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
-    .ok { background: #e7f8ee; color: #1c7a45; }
-    .err { background: #fdeaea; color: #b32626; }
-    .wa-btn { background: #25D366; display: block; text-align: center; text-decoration: none; color: white; padding: 12px; border-radius: 8px; margin-top: 15px; font-weight: bold; }
+    body { font-family: 'Inter', sans-serif; }
   </style>
 </head>
-<body>
-  <div class="container">
-    <h1>Reserva tu cita</h1>
-    
-    <div id="form-area">
-      <label>Servicio</label>
-      <select id="servicio"><option value="">Cargando...</option></select>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+  <div id="root"></div>
 
-      <label>Fecha</label>
-      <input type="date" id="fecha">
+  <script type="text/babel">
+    const { useState, useEffect } = React;
 
-      <label>Hora</label>
-      <input type="time" id="hora" step="900">
+    function App() {
+      const [services, setServices] = useState([]);
+      const [loading, setLoading] = useState(true);
+      
+      const [selectedService, setSelectedService] = useState(null);
+      const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+      const [selectedTime, setSelectedTime] = useState('');
+      const [clientName, setClientName] = useState('');
+      const [clientPhone, setClientPhone] = useState('+53 5');
+      
+      const [bookingSuccess, setBookingSuccess] = useState(null);
+      const [errorMsg, setErrorMsg] = useState('');
 
-      <label>Tu nombre</label>
-      <input type="text" id="cliente" placeholder="Ej: Laura Pérez">
+      // Configuración del negocio (puedes cambiarlo luego para que venga de la BD)
+      const businessName = "Bella Nails";
+      const openTime = "09:00";
+      const closeTime = "19:00";
 
-      <label>Tu teléfono</label>
-      <input type="tel" id="telefono" placeholder="Ej: 55551234">
+      useEffect(() => {
+        // Cargar servicios reales de la base de datos
+        fetch('/api/servicios')
+          .then(res => res.json())
+          .then(data => {
+            setServices(data);
+            setLoading(false);
+          })
+          .catch(err => {
+            console.error(err);
+            setLoading(false);
+          });
+      }, []);
 
-      <button id="btn-reservar" onclick="reservar()">Confirmar reserva</button>
-    </div>
+      // Generar horarios (cada 30 min para que sea fácil elegir)
+      const generateTimeSlots = () => {
+        if (!selectedService) return [];
+        
+        let slots = [];
+        let [openH, openM] = openTime.split(':').map(Number);
+        let [closeH, closeM] = closeTime.split(':').map(Number);
 
-    <div id="resultado" class="hidden"></div>
-  </div>
+        let currentMins = openH * 60 + openM;
+        let closeMins = closeH * 60 + closeM;
 
-  <script>
-    let servicios = [];
-
-    // Cargar servicios al abrir la página
-    fetch('/api/servicios')
-      .then(r => r.json())
-      .then(data => {
-        servicios = data;
-        const select = document.getElementById('servicio');
-        select.innerHTML = '<option value="">Selecciona un servicio</option>';
-        data.forEach(s => {
-          select.innerHTML += `<option value="${s.id}">${s.nombre} (${s.duracion} min) - $${s.precio}</option>`;
-        });
-      });
-
-    // Poner fecha de hoy por defecto
-    const hoy = new Date().toISOString().split('T')[0];
-    document.getElementById('fecha').value = hoy;
-    document.getElementById('fecha').min = hoy;
-
-    async function reservar() {
-      const btn = document.getElementById('btn-reservar');
-      const servicioId = document.getElementById('servicio').value;
-      const fecha = document.getElementById('fecha').value;
-      const hora = document.getElementById('hora').value;
-      const cliente = document.getElementById('cliente').value;
-      const telefono = document.getElementById('telefono').value;
-
-      if (!servicioId || !fecha || !hora || !cliente || !telefono) {
-        alert("Por favor, llena todos los campos.");
-        return;
-      }
-
-      btn.disabled = true;
-      btn.innerText = "Reservando...";
-
-      try {
-        const res = await fetch('/api/reservar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fecha, hora, servicio_id: servicioId, cliente, telefono })
-        });
-        const data = await res.json();
-
-        if (res.ok) {
-          document.getElementById('form-area').classList.add('hidden');
-          const div = document.getElementById('resultado');
-          div.classList.remove('hidden');
-          div.innerHTML = `
-            <div class="msg ok">¡Cita reservada con éxito!</div>
-            <p style="text-align:center; margin-top:15px;">Para confirmar tu cita con el negocio, haz clic aquí:</p>
-            <a href="${data.waLink}" class="wa-btn" target="_blank">Enviar WhatsApp de confirmación</a>
-          `;
-        } else {
-          alert(data.error || "Error al reservar");
-          btn.disabled = false;
-          btn.innerText = "Confirmar reserva";
+        while (currentMins + selectedService.duracion <= closeMins) {
+          let h = Math.floor(currentMins / 60);
+          let m = currentMins % 60;
+          let timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+          slots.push(timeStr);
+          currentMins += 30; // Bloques de 30 min
         }
-      } catch (e) {
-        alert("Error de conexión");
-        btn.disabled = false;
-        btn.innerText = "Confirmar reserva";
+        return slots;
+      };
+
+      const handleBook = async (e) => {
+        e.preventDefault();
+        setErrorMsg('');
+        if (!clientName || !clientPhone || !selectedTime || !selectedService) return;
+
+        try {
+          const res = await fetch('/api/reservar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fecha: selectedDate,
+              hora: selectedTime,
+              servicio_id: selectedService.id,
+              cliente: clientName,
+              telefono: clientPhone
+            })
+          });
+
+          const data = await res.json();
+
+          if (res.ok) {
+            setBookingSuccess({ ...data, time: selectedTime, date: selectedDate, service: selectedService });
+          } else {
+            setErrorMsg(data.error || 'Error al reservar la cita.');
+          }
+        } catch (err) {
+          setErrorMsg('Error de conexión con el servidor.');
+        }
+      };
+
+      if (loading) {
+        return <div className="min-h-screen flex items-center justify-center text-slate-500">Cargando servicios...</div>;
       }
+
+      if (bookingSuccess) {
+        return (
+          <div className="max-w-md mx-auto mt-12 bg-white p-8 rounded-2xl shadow-xl border text-center">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-bold">✓</div>
+            <h2 className="text-2xl font-bold text-slate-800">¡Cita Agendada!</h2>
+            <p className="text-slate-600 mt-2 text-sm">Tu turno ha sido registrado correctamente en <span className="font-semibold">{businessName}</span>.</p>
+            
+            <div className="bg-slate-50 p-4 rounded-xl my-6 text-left space-y-2 text-sm border">
+              <p><strong>Servicio:</strong> {bookingSuccess.service.nombre}</p>
+              <p><strong>Fecha y Hora:</strong> {bookingSuccess.date} a las {bookingSuccess.time}</p>
+              <p><strong>Local:</strong> {businessName}</p>
+            </div>
+
+            <div className="space-y-3">
+              <a
+                href={bookingSuccess.waLink}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+              >
+                💬 Enviar Confirmación por WhatsApp
+              </a>
+              <button
+                onClick={() => { 
+                  setBookingSuccess(null); setSelectedService(null); setSelectedTime(''); setClientName(''); 
+                }}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 px-4 rounded-xl"
+              >
+                Hacer otra reserva
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      const timeSlots = generateTimeSlots();
+
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col">
+          <header className="bg-slate-900 text-white shadow-md sticky top-0 z-50">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="bg-emerald-500 p-2 rounded-xl text-slate-900 font-bold">💅</div>
+                <div>
+                  <h1 className="text-xl font-black tracking-tight text-white">{businessName}</h1>
+                  <p className="text-xs text-slate-400">Reserva tu cita online</p>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-4xl mx-auto px-4 py-8 flex-1 w-full">
+            {errorMsg && (
+              <div className="bg-red-50 text-red-700 p-4 rounded-xl mb-6 border border-red-200 text-sm text-center font-medium">
+                {errorMsg}
+              </div>
+            )}
+
+            {/* Step 1 */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border mb-8">
+              <h2 className="text-lg font-bold text-slate-800 mb-4">1. Selecciona un Servicio</h2>
+              {services.length === 0 ? (
+                <p className="text-slate-500 text-sm">No hay servicios disponibles por ahora.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {services.map(service => (
+                    <div
+                      key={service.id}
+                      onClick={() => { setSelectedService(service); setSelectedTime(''); }}
+                      className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedService?.id === service.id ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-600/20' : 'border-slate-200 hover:border-slate-300'}`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-semibold text-slate-800">{service.nombre}</h3>
+                        <span className="bg-emerald-100 text-emerald-800 font-bold text-sm px-2 py-0.5 rounded-lg">{service.precio} CUP</span>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium mt-3">⏱️ Duración: {service.duracion} min</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Step 2 */}
+            {selectedService && (
+              <form onSubmit={handleBook} className="bg-white rounded-2xl p-6 shadow-sm border space-y-6">
+                <h2 className="text-lg font-bold text-slate-800">2. Elige Fecha, Hora y tus Datos</h2>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Fecha</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={selectedDate}
+                    onChange={(e) => { setSelectedDate(e.target.value); setSelectedTime(''); }}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Horarios Disponibles:</label>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+                    {timeSlots.map((time, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSelectedTime(time)}
+                        className={`py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+                          selectedTime === time ? 'bg-emerald-600 text-white shadow-md' :
+                          'bg-slate-50 text-slate-700 border hover:border-emerald-600'
+                        }`}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Tu Nombre</label>
+                    <input
+                      type="text"
+                      placeholder="Ej. María Rodríguez"
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Tu Teléfono</label>
+                    <input
+                      type="text"
+                      value={clientPhone}
+                      onChange={(e) => setClientPhone(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!selectedTime}
+                  className={`w-full py-3.5 rounded-xl font-medium text-white transition-all ${selectedTime ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg' : 'bg-slate-300 cursor-not-allowed'}`}
+                >
+                  Confirmar Cita
+                </button>
+              </form>
+            )}
+          </main>
+        </div>
+      );
     }
+
+    ReactDOM.render(<App />, document.getElementById('root'));
   </script>
 </body>
 </html>
